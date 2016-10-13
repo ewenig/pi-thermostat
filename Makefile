@@ -1,3 +1,3 @@
 CC=gcc
 
-LDFLAGS=-lwiringPi -lpthread
+LDFLAGS=-lwiringPi -lpthread -lmosquitto
