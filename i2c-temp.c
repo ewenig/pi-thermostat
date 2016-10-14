@@ -12,6 +12,15 @@
 int main(int argc, char** argv);
 float CtoF(float celsius);
 int publishToAdafruit(float temp);
+void onConnected(struct mosquitto *mqtt, void *ptr, int res);
+
+bool pubSucceeded;
+
+struct mqtt_data {
+    char *user;
+    char *feed;
+    float temp;
+};
 
 int main(int argc, char** argv) {
     int fd = wiringPiI2CSetup(I2C_DEV);
@@ -47,6 +56,8 @@ float CtoF(float celsius) {
 
 int publishToAdafruit(float temp) {
     int ret;
+    pubSucceeded = false;
+
     char *key = getenv("AIO_KEY");
     if (key == NULL) {
         printf("AIO_KEY not set\n");
@@ -66,47 +77,88 @@ int publishToAdafruit(float temp) {
     }
 
     mosquitto_lib_init();
-    struct mosquitto *mqtt = mosquitto_new(NULL, true, NULL);
+
+    // setup user data structure
+    struct mqtt_data *data = (struct mqtt_data *)malloc(sizeof(struct mqtt_data));
+    data->user = strdup(user);
+    data->feed = strdup(feed);
+    data->temp = temp;
+
+    struct mosquitto *mqtt = mosquitto_new(NULL, true, data);
     ret = mosquitto_username_pw_set(mqtt, user, key);
     if (ret != MOSQ_ERR_SUCCESS) {
-        printf("Couldn't set PW\n");
+        printf("Couldn't set PW: %s\n", mosquitto_strerror(ret));
         return 1;
     }
+
+    // setup callback
+    mosquitto_connect_callback_set(mqtt, (void *) &onConnected);
 
     // XXX
     ret = mosquitto_tls_insecure_set(mqtt, true);
     if (ret != MOSQ_ERR_SUCCESS) {
-        printf("Couldn't set insecure TLS\n");
+        printf("Couldn't set insecure TLS: %s\n", mosquitto_strerror(ret));
+        return 1;
+    }
+
+    ret = mosquitto_tls_set(mqtt, "adafruit.pem", NULL, NULL, NULL, NULL);
+    if (ret != MOSQ_ERR_SUCCESS) {
+        printf("Couldn't set TLS: %s\n", mosquitto_strerror(ret));
         return 1;
     }
 
     ret = mosquitto_connect(mqtt, "io.adafruit.com", 8883, 60);
     if (ret != MOSQ_ERR_SUCCESS) {
-        printf("Couldn't connect to adafruit\n");
+        printf("Couldn't connect to adafruit: %s\n", mosquitto_strerror(ret));
         return 1;
     }
 
-
-    // construct the message
-    char msg[512];
-    sprintf(msg, "%.2f", temp);
-
-    char feedid[strlen(user) + strlen(feed) + 7];
-    sprintf(feedid, "%s/feed/%s", user, feed);
-
-    ret = mosquitto_publish(mqtt, NULL, feedid, sizeof(msg), (void *) msg, 0, false);
-    if (ret != MOSQ_ERR_SUCCESS) {
-        printf("Couldn't publish to adafruit\n");
-        return 1;
+    while (!pubSucceeded) {
+        mosquitto_loop(mqtt, 1000, 1);
     }
 
     ret = mosquitto_disconnect(mqtt);
     if (ret != MOSQ_ERR_SUCCESS) {
-        printf("Couldn't disconnect from adafruit\n");
+        printf("Couldn't disconnect from adafruit: %s\n", mosquitto_strerror(ret));
         return 1;
     }
 
+    printf("Successfully published to adafruit\n");
     mosquitto_destroy(mqtt);
     mosquitto_lib_cleanup();
     return 0;
+ }
+
+void onConnected(struct mosquitto *mqtt, void *ptr, int res) {
+    struct mqtt_data *data = (struct mqtt_data *)ptr;
+    if (res != 0) {
+        printf("Failed connecting to adafruit: %s\n", mosquitto_connack_string(res));
+        exit(1);
+    }
+
+    // construct the message
+    char msg[512];
+    sprintf(msg, "%.2f", data->temp);
+
+    char feedid[strlen(data->user) + strlen(data->feed) + 7];
+    sprintf(feedid, "%s/feed/%s", data->user, data->feed);
+
+    int ret = mosquitto_publish(mqtt, NULL, feedid, sizeof(msg), (void *) msg, 1, false);
+    if (ret != MOSQ_ERR_SUCCESS) {
+        printf("Couldn't publish to adafruit: %s\n", mosquitto_strerror(ret));
+        exit(1);
+    }
+
+    while (mosquitto_want_write(mqtt)) {
+        ret = mosquitto_loop_write(mqtt, 1);
+        if (ret != MOSQ_ERR_SUCCESS && strcmp(mosquitto_strerror(ret), "Success") != 0) {
+            printf("Couldn't loop: %s\n", mosquitto_strerror(ret));
+            exit(1);
+        }
+    }
+
+    free(data->user);
+    free(data->feed);
+    free(data);
+    pubSucceeded = true;
 }
