@@ -1,7 +1,12 @@
-CFLAGS=-O2
-LDFLAGS=-lwiringPi -lpthread
+.PHONY: all install clean
 
-PREFIX=/usr
+PREFIX ?= $(DESTDIR)/usr
+BINDIR ?= $(PREFIX)/bin
+
+CFLAGS = -O2
+LDFLAGS += -lwiringPi -lpthread
+
+PT_binaries = i2c-temp thermostat fan-on fan-off
 
 i2c-temp: i2c-temp.c temp-ctl.c
 	$(CC) -o i2c-temp $(CFLAGS) $(LDFLAGS) i2c-temp.c temp-ctl.c
@@ -15,11 +20,15 @@ fan-on: admin-cmd.c fan-ctl.c
 fan-off: admin-cmd.c fan-ctl.c
 	$(CC) -o fan-off -DFAN_OFF $(CFLAGS) $(LDFLAGS) admin-cmd.c fan-ctl.c
 
-install: i2c-temp thermostat fan-on fan-off
-	install -m 0755 thermostat $(PREFIX)/bin
-	install -m 0755 i2c-temp $(PREFIX)/bin
-	install -m 0755 fan-on $(PREFIX)/bin
-	install -m 0755 fan-off $(PREFIX)/bin
+all: $(PT_binaries)
 
-.PHONY: install
+install: $(PT_binaries)
+	install -d $(BINDIR)
+	install -m 0755 thermostat $(BINDIR)
+	install -m 0755 i2c-temp $(BINDIR)
+	install -m 0755 fan-on $(BINDIR)
+	install -m 0755 fan-off $(BINDIR)
+
+clean:
+	rm $(PT_binaries)
 
