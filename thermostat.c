@@ -3,8 +3,8 @@
 #include "temp-ctl.h"
 #include "fan-ctl.h"
 
-int main(char argc, char** argv) {
-    // open goodtemp file
+int main(int argc, char** argv) {
+    // check for /etc/fanadmin
     FILE *fp;
     fp = fopen("/etc/fanadmin","r");
     if (fp != NULL) {
@@ -13,6 +13,7 @@ int main(char argc, char** argv) {
         return 0;
     }
 
+    // open goodtemp file
     fp = fopen("/etc/goodtemp", "r");
     if (fp == NULL) {
         puts("Couldn't open /etc/goodtemp\n");
@@ -40,3 +41,4 @@ int main(char argc, char** argv) {
 
     return 0;
 }
+

@@ -8,3 +8,4 @@ float CtoF(float celsius);
 #define REG_AMBIENT_TEMP 0x05
 
 #endif
+
