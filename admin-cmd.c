@@ -14,8 +14,8 @@ int main(int argc, char** argv) {
     // touch /etc/fanadmin
     FILE *fp;
     fp = fopen("/etc/fanadmin","w+");
-    if (fp != NULL) {
-        puts("Couldn't open /etc/goodtemp\n");
+    if (fp == NULL) {
+        puts("Couldn't open /etc/fanadmin");
         return 1;
     }
     fclose(fp);
